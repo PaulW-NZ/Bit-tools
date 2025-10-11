@@ -7,6 +7,8 @@ A collection of command-line utilities for low-level, bit-by-bit data manipulati
 - **`bit-editor`**: A tool for applying a chain of transformations (take, skip, invert, etc.) to a binary file.
 - **`interleaver`**: A tool for re-ordering, multiplexing, and de-multiplexing data streams at the bit, byte, or word level.
 - **`lfsr`**: A tool for generating, encrypting/decrypting, and scrambling/descrambling data using Linear Feedback Shift Registers.
+- **`crc`**: A flexible tool for calculating Cyclic Redundancy Checks (CRCs) of various bit widths.
+- **`hamming`**: A tool for encoding and decoding data with error-correcting Hamming codes.
 
 ## Building
 
@@ -15,7 +17,7 @@ To build the tools from source, you need to have [Go](https://golang.org/) insta
 Clone the repository and run the following command in the project directory to build all executables:
 
 ```bash
-go build -o bit-editor bit-editor.go && go build -o interleaver interleaver.go && go build -o lfsr lfsr.go
+go build -o bit-editor bit-editor.go && go build -o interleaver interleaver.go && go build -o lfsr lfsr.go && go build -o crc crc.go && go build -o hamming hamming.go
 ```
 
 ---
@@ -195,6 +197,119 @@ Descrambles a data stream that was previously scrambled using the same polynomia
     ./lfsr --mode=descramble -p "16,14,13,11" -i scrambled.dat -o descrambled.txt
     diff plain_scramble.txt descrambled.txt # Should produce no output
     ```
+
+---
+
+## `crc`
+
+A flexible tool for calculating Cyclic Redundancy Checks (CRCs).
+
+### Features
+
+- **Multiple Widths**: Supports 8, 16, and 32-bit CRC calculations.
+- **Custom Parameters**: Allows specifying a custom generator polynomial, initial value, and final XOR value.
+- **Algorithm Handling**: Automatically handles the underlying details of reflected, little-endian CRC calculation.
+- **Informative Help**: Includes examples of common CRC standards (CRC-32, MODBUS, DARC) in its help message.
+
+### Usage (`crc`)
+
+```bash
+./crc [flags...] <file>
+```
+
+#### Flags
+
+| Flag          | Description                                  |
+| ------------- | -------------------------------------------- |
+| `-width <int>`  | CRC width in bits (8, 16, 32). Defaults to 32. |
+| `-poly <hex>`   | Generator polynomial in normal form.         |
+| `-init <hex>`   | Initial value of the CRC register.           |
+| `-xorout <hex>` | The value to XOR with the final CRC.         |
+
+### Examples (`crc`)
+
+**1. Calculate the default CRC-32 for a file:**
+```bash
+./crc README.md
+```
+
+**2. Calculate the CRC-16/MODBUS checksum for a file:**
+```bash
+./crc -width=16 -poly=0x8005 -init=0xffff -xorout=0 some_file.dat
+```
+
+---
+
+## `hamming`
+
+A tool for encoding and decoding data using Hamming codes, capable of automatically correcting single-bit errors.
+
+### Features
+
+- **Generic Implementation**: Supports any standard Hamming code `(2^m-1, 2^m-1-m)` via the `-m` flag (e.g., (7,4), (15,11), (31,26)).
+- **Extended Code Support**: Can use extended Hamming codes (e.g., (8,4)) to detect 2-bit errors.
+- **Error Correction**: Automatically corrects single-bit errors in each block of data during decoding.
+- **Verbose Reporting**: An optional `-v` flag reports when and where corrections occurred.
+- **Uncorrectable Error Warnings**: Detects and warns about uncorrectable 2-bit errors when using extended codes.
+
+### Usage (`hamming`)
+
+The tool is run in either encode or decode mode.
+
+```bash
+# Encode
+./hamming -encode [-m <m>] [-extended] -i <infile> -o <outfile>
+
+# Decode
+./hamming -decode [-m <m>] [-extended] [-v] -i <infile> -o <outfile>
+```
+
+#### Flags
+
+| Flag        | Description                                                                                             |
+| ----------- | ------------------------------------------------------------------------------------------------------- |
+| `-encode`   | Run in encode mode.                                                                                     |
+| `-decode`   | Run in decode mode.                                                                                     |
+| `-i <file>`   | Input file path. Defaults to standard input.                                                            |
+| `-o <file>`   | Output file path. Defaults to standard output.                                                          |
+| `-m <int>`    | Sets the `m` parameter for the code, defining `(2^m-1, 2^m-1-m)`. Defaults to 3 for Hamming(7,4).        |
+| `-extended` | Use the extended version of the selected Hamming code (e.g., (8,4) if `-m=3`).                            |
+| `-v`        | Verbose mode (decode only). Prints a message to stderr each time a 1-bit error is corrected.              |
+
+### Examples (`hamming`)
+
+**1. Protect a file with standard Hamming(7,4) and then decode it:**
+```bash
+# Encode the file
+./hamming -encode -i plain.txt -o encoded.ham
+
+# Corrupt a single bit in the encoded file (for demonstration)
+# (Assuming a tool or script to flip a bit at a certain position)
+
+# Decode the file; errors will be silently corrected
+./hamming -decode -i encoded.ham -o decoded.txt
+```
+
+**2. Use extended Hamming(8,4) and see verbose output for a corrected error:**
+```bash
+# Encode with -m=3 and -extended
+./hamming -encode -m=3 -extended -i plain.txt -o encoded_ext.ham
+
+# Corrupt a bit in encoded_ext.ham...
+
+# Decode with verbose flag to see the correction report
+./hamming -decode -m=3 -extended -v -i encoded_ext.ham -o decoded_ext.txt
+# Stderr will show: "Corrected 1-bit error in block X at position Y"
+```
+
+**3. Use a larger Hamming(15,11) code:**
+```bash
+# Encode with -m=4
+./hamming -encode -m=4 -i large_file.dat -o encoded_15_11.ham
+
+# Decode
+./hamming -decode -m=4 -i encoded_15_11.ham -o decoded_large_file.dat
+```
 
 ---
 
